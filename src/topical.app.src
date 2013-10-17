@@ -1,0 +1,10 @@
+{application, topical, [
+	{description, "topic routing for things and stuff"},
+	{vsn, "0.0.1"},
+	{registered, []},
+	{applications, [
+		kernel,
+		stdlib
+	]},
+	{mod, { topical_app, []}}
+ ]}.

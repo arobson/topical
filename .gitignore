@@ -1,0 +1,9 @@
+priv/
+ebin/
+deps/
+dump*
+*.beam
+*.o
+examples/
+.eunit/
+logs/
