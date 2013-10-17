@@ -25,21 +25,21 @@ When subscribing to a topic, you can use two types of wildcards.
  * '#' - matches 0 to many namespace segments
 
 ### Methods 
-'''erlang
+```erlang
 topical:publish(Topic, Event).
-'''
+```
 Publish an event with a given topic.
 
 
-'''erlang
+```erlang
 topical:subscribe(Topic, Callback).
-'''
+```
 Add the handler to the topic.
 
 
-'''erlang
+```erlang
 topical:unsubscribe(Topic, Callback).
-'''
+```
 Remove the handler from the given topic.
 
 ### Callback Format
