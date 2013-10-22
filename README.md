@@ -54,8 +54,8 @@ __Why the reversal of arguments??__: my experience with this style of internal p
 
 Put the following into your rebar.config's [{deps,[]}] collection:
 ```erlang
-	{json_erl_jones, "",
-		{git, "git://github.com/arobson/json_erl_jones",
+	{topical, "",
+		{git, "git://github.com/arobson/topical",
 		{branch, "master" } } }
 ```
 
