@@ -24,23 +24,40 @@
 %%  API
 %% ==================================================================
 
--spec publish(list(), term()) -> ok.
+%% Publishes an event to a given topic so that all
+%% matching subscriptions receive the message.
+%% Topic takes the form of a '.' separated namespace:
+%% - "example.topic.value"
+-spec publish(Topic::list(), Event::term()) -> ok.
+publish(Topic, Event) when is_bitstring(Topic) ->
+	publish(binary_to_list(Topic), Event);
 publish(Topic, Event) ->
 	gen_event:notify(?BROKER, {Topic, Event}).
 
+%% Starts the topicla application
 -spec start() -> ok.
 start() ->
 	application:load(topical),
 	application:start(topical).
 
+%% Stops the topical application
 -spec stop() -> ok.
 stop() ->
 	application:stop(topical).
 
--spec subscribe(list(), term()) -> ok.
+%% Subscribes to a topic pattern providing a callback
+%% for handling messages. Topic takes the form of
+%% a '.' seperated namespace with AMQP style wildcard support:
+%%	 "#" - matches 0 to any number of topic segment
+%% 	 "*" - matches 1 and only 1 topic segment
+%% 	 "*.world" - any topic with 2 segments ending in "world"
+%%	 "#.world" - any topic ending with "world" including only "world"
+-spec subscribe(Topic::list(), Callback::fun((term(), list()) -> ok)) -> ok.
 subscribe(Topic, Callback) ->
 	gen_event:call(?BROKER, ?HANDLER, {subscribe, Topic, Callback}).
 
--spec unsubscribe(list(), term()) -> ok.
+%% Removes the callback from a topic. Must provide the
+%% exact Topic pattern and callback reference.
+-spec unsubscribe(Topic::list(), Callback::fun((term(), list()) -> ok)) -> ok.
 unsubscribe(Topic, Callback) ->
 	gen_event:call(?BROKER, ?HANDLER, {unsubscribe, Topic, Callback}).

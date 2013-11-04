@@ -25,99 +25,119 @@
 -compile([export_all]).
 -endif.
 
+%% First part is the key (topic/pattern segment),
+%% Second part is a tuple of a list of Values attached
+%% to this particular node and the child nodes.
 -type trie() :: [{list(),{[term()],[trie()]}}].
 
 %% ===================================================================
 %%  API
 %% ===================================================================
 
--spec add(list(), term(), trie()) -> trie().
-add(Key, Value, []) ->
-	add_leaf([], parts(Key), Value);
-add(Key, Value, Trie) ->
-	add_leaf(Trie, parts(Key), Value).
+%% Add key to the trie. Pattern is expected to be a string of the form:
+%%  "#"
+%%  "*"
+%%  "this.#.test"
+-spec add(Pattern::list(), Value::term(), trie()) -> trie().
+add(Pattern, Value, []) ->
+	add_leaf([], segment(Pattern), Value);
+add(Pattern, Value, Trie) ->
+	add_leaf(Trie, segment(Pattern), Value).
 
--spec get(list(), trie()) -> [term()] | [].
-get(Pattern, Trie) ->
-	find_leaf(Trie, parts(Pattern)).
+%% Return a list of all values found that contain a
+%% subscription matching the Topic
+-spec get(Topic::list(), Trie::trie()) -> [term()] | [].
+get(Topic, Trie) ->
+	find_leaf(Trie, segment(Topic)).
 
--spec is_member(list(), trie()) -> true | false.
-is_member(Key, Trie) ->
-	case find_leaf(Trie, parts(Key)) of
+%% Determine if Pattern presently exists in Trie
+-spec is_member(Pattern::list(), Trie::trie()) -> true | false.
+is_member(Pattern, Trie) ->
+	case find_leaf(Trie, segment(Pattern)) of
 		nomatch -> false;
 		_ -> true
 	end.
 
--spec remove(list(), term(), trie()) -> trie().
-remove(Key, Value, Trie) ->
-	remove_leaf(Trie, parts(Key), Value).
+%% Removes the Pattern and Value from the Trie if they exist.
+-spec remove(Pattern::list(), Value::term(), Trie::trie()) -> trie().
+remove(Pattern, Value, Trie) ->
+	remove_leaf(Trie, segment(Pattern), Value).
 
 %% ===================================================================
 %%  Internal functions
 %% ===================================================================
 
-add_leaf([], [Part], V) ->
-	[{Part, {[V],[]}}];
+%% No more nodes to check at this level of the trie, 
+%% create a new node and return it.
+add_leaf([], [Segment], NewValue) ->
+	[{Segment, {[NewValue],[]}}];
 
-add_leaf([], [Part|Parts], V) ->
-	[{Part, {[], add_leaf([], Parts, V)}}];
+%% No more nodes to check, but there are additional
+%% segments to create. 
+add_leaf([], [Segment|Segments], NewValue) ->
+	[{Segment, {[], add_leaf([], Segments, NewValue)}}];
 
-add_leaf([{Part, {V, L}}|T], [Part], NV) ->
-	[{Part, {[NV|V], L}}|T];
+%% Matching node found on the last segment,
+%% add the new value to this node and return.
+add_leaf([{Segment, {Values, Children}}|T], [Segment], NewValue) ->
+	[{Segment, {[NewValue|Values], Children}}|T];
 
-add_leaf([{Part, {V, []}}|T], [Part|Parts], NV) ->
-	[{Part, {V, add_leaf([], Parts, NV)}}|T];
+%% Matching node found with additional segments,
+%% to create.
+add_leaf([{Segment, {Values, []}}|T], [Segment|Segments], NewValue) ->
+	[{Segment, {Values, add_leaf([], Segments, NewValue)}}|T];
 
-add_leaf([{Part, {V, L}}|T], [Part|Parts], NV) ->
-	[{Part, {V, add_leaf(L, Parts, NV)}}|T];
 
-add_leaf([H|T], Parts, V) ->
-	[H|add_leaf(T, Parts, V)].
+add_leaf([{Segment, {Values, Children}}|T], [Segment|Segments], NewValue) ->
+	[{Segment, {Values, add_leaf(Children, Segments, NewValue)}}|T];
+
+add_leaf([H|T], Segments, Values) ->
+	[H|add_leaf(T, Segments, Values)].
 
 contains(X) -> fun(Y) -> Y =/= X end.
 
-find_leaf(Trie, Parts) -> find_leaf(Trie, Parts, []).
+find_leaf(Trie, Segments) -> find_leaf(Trie, Segments, []).
 
 find_leaf([], _, Matches) -> Matches;
 
-find_leaf([{Part, {V, _}}|T], [Part], Matches) -> 
-	find_leaf(T, [Part], Matches ++ V);
+find_leaf([{Segment, {Values, _}}|T], [Segment], Matches) -> 
+	find_leaf(T, [Segment], Matches ++ Values);
 
-find_leaf([{"*", {V, _}}|T], [Part], Matches) -> 
-	find_leaf(T, [Part], Matches ++ V);
+find_leaf([{"*", {Values, _}}|T], [Segment], Matches) -> 
+	find_leaf(T, [Segment], Matches ++ Values);
 
-find_leaf([{"#", {V, _}}|T], [Part], Matches) -> 
-	find_leaf(T, [Part], Matches ++ V);
+find_leaf([{"#", {Values, _}}|T], [Segment], Matches) -> 
+	find_leaf(T, [Segment], Matches ++ Values);
 
-find_leaf([{Part, {_, []}}|T], [Part|_]=All, Matches) -> 
+find_leaf([{Segment, {_, []}}|T], [Segment|_]=All, Matches) -> 
 	find_leaf(T, All, Matches);
 
-find_leaf([{"*", {_, L}}|T], [_|Parts]=All, Matches) -> 
-	find_leaf(L, Parts, find_leaf(T, All, Matches));
+find_leaf([{"*", {_, Children}}|T], [_|Segments]=All, Matches) -> 
+	find_leaf(Children, Segments, find_leaf(T, All, Matches));
 
-find_leaf([{"#", {V, _}}|[{Part, {_, L}}|T]], [Part|Parts]=All, Matches) ->
-	find_leaf(L, Parts, find_leaf(T, All, Matches ++ V));
+find_leaf([{"#", {Values, _}}|[{Segment, {_, Children}}|T]], [Segment|Segments]=All, Matches) ->
+	find_leaf(Children, Segments, find_leaf(T, All, Matches ++ Values));
 
-find_leaf([{"#", {V, L}}|T], [_|_]=All, Matches) -> 
-	find_leaf(L, All, find_leaf(T, All, Matches ++ V));
+find_leaf([{"#", {Values, Children}}|T], [_|_]=All, Matches) -> 
+	find_leaf(Children, All, find_leaf(T, All, Matches ++ Values));
 
-find_leaf([{Part, {_, L}}|T], [Part|Parts]=All, Matches) -> 
-	find_leaf(L, Parts, find_leaf(T, All, Matches));
+find_leaf([{Segment, {_, Children}}|T], [Segment|Segments]=All, Matches) -> 
+	find_leaf(Children, Segments, find_leaf(T, All, Matches));
 
-find_leaf([_|T], Parts, Matches) -> find_leaf(T, Parts, Matches).
-
-parts(Key) -> string:tokens(Key, ".").
+find_leaf([_|T], Segments, Matches) -> find_leaf(T, Segments, Matches).
 
 remove_leaf([], _, _) -> [];
 
-remove_leaf([{Part, {V, L}}|T], [Part], RV) ->
-	NV = lists:filter(contains(RV), V),
-	[{Part, {NV, L}}|T];
+remove_leaf([{Segment, {Values, Children}}|T], [Segment], Remove) ->
+	NewValues = lists:filter(contains(Remove), Values),
+	[{Segment, {NewValues, Children}}|T];
 
-remove_leaf([{_, {_, []}}|_]=L, [_|_], _) -> L;
+remove_leaf([{_, {_, []}}|_]=Children, [_|_], _) -> Children;
 
-remove_leaf([{Part, {V, L}}|T], [Part|Parts], NV) ->
-	[{Part, {V, remove_leaf(L, Parts, NV)}}|T];
+remove_leaf([{Segment, {Values, Children}}|T], [Segment|Segments], NewValues) ->
+	[{Segment, {Values, remove_leaf(Children, Segments, NewValues)}}|T];
 
-remove_leaf([H|T], Parts, V) ->
-	[H|remove_leaf(T, Parts, V)].
+remove_leaf([H|T], Segments, Values) ->
+	[H|remove_leaf(T, Segments, Values)].
+
+segment(Key) -> string:tokens(Key, ".").

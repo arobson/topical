@@ -44,7 +44,12 @@ stop() -> gen_event:stop(?MODULE).
 %% ===================================================================
 init([]) ->
 	{ok, []}.
- 
+
+%% Responsds to an event of the form 
+%% {"topic.specification", { event } }
+%% and uses the trie to retrieve a list of
+%% subscribers to call with the event.
+-spec handle_event(Topic::{list(), term()}, State::term()) ->{ok, term()}.
 handle_event({Topic, Event}, State) ->
 	Callbacks = trie:get(Topic, State),
 	lists:foreach(
