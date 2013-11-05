@@ -25,6 +25,8 @@
 		code_change/3,
 		terminate/2
 	]).
+
+-record(state, {cache=dict:new(), trie=[]}).
  
 %% ===================================================================
 %%  API
@@ -43,30 +45,32 @@ stop() -> gen_event:stop(?MODULE).
 %%  gen_event
 %% ===================================================================
 init([]) ->
-	{ok, []}.
+	{ok, #state{}}.
 
 %% Responsds to an event of the form 
 %% {"topic.specification", { event } }
 %% and uses the trie to retrieve a list of
 %% subscribers to call with the event.
 -spec handle_event(Topic::{list(), term()}, State::term()) ->{ok, term()}.
-handle_event({Topic, Event}, State) ->
-	Callbacks = trie:get(Topic, State),
-	lists:foreach(
-		fun(Call) ->
-			spawn(fun() -> Call(Event, Topic) end)
-		end,
-	Callbacks),
-	{ok, State}.
+handle_event({Topic, Event}, #state{cache=Cache, trie=Trie}=State) ->
+	Callbacks = case dict:find(Topic, Cache) of
+		{ok, X} ->  X;
+		_ -> trie:get(Topic, Trie)
+	end,
+	NewCache = dict:update(Topic, fun(_) -> Callbacks end, Callbacks, Cache),
+	publish_events(Topic, Event, Callbacks),
+	{ok, State#state{cache=NewCache}}.
  
 handle_call(state, State) ->
 	{ok, State, State};
 
-handle_call({subscribe, Topic, Callback}, State) ->
-	{ok, ok, trie:add(Topic, Callback, State)};
+handle_call({subscribe, Topic, Callback}, #state{trie=Trie}=_State) ->
+	NewState=#state{trie=trie:add(Topic, Callback, Trie)},
+	{ok, ok, NewState};
 
-handle_call({unsubscribe, Topic, Callback}, State) ->
-	{ok, ok, trie:remove(Topic, Callback, State)}.
+handle_call({unsubscribe, Topic, Callback}, #state{trie=Trie}=_State) ->
+	NewState=#state{trie=trie:remove(Topic, Callback, Trie)},
+	{ok, ok, NewState}.
  
 handle_info(_, State) ->
 	{ok, State}.
@@ -76,3 +80,11 @@ code_change(_OldVsn, State, _Extra) ->
  
 terminate(_Reason, _State) ->
 	ok.
+
+publish_events(Topic, Event, Callbacks) ->
+	lists:foreach(
+		fun(Call) ->
+			% spawn(fun() -> Call(Event, Topic) end)
+			Call(Event, Topic)
+		end,
+	Callbacks).

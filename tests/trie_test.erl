@@ -22,7 +22,7 @@ trie_test_() ->
 			[
 				?_assertEqual(true, trie:is_member("this.is.a.test", T)),
 				?_assertEqual(["all", "blank is a blank", "ta-da"], trie:get("this.is.a.test", T)),
-				?_assertEqual(["all", "two", "one"], trie:get("a.b.c", T)),
+				?_assertEqual(["all", "one", "two"], trie:get("a.b.c", T)),
 				?_assertEqual(["all"], trie:get("a.b", T))
 			]
 		end
@@ -35,7 +35,7 @@ contains_test() ->
 
 create_trie() ->
 	T = [],
-	T1 = trie:add("this.is.a.test", "ta-da", T),
+	T1 = trie:add("this.#.test", "ta-da", T),
 	T2 = trie:add("a.b.c", "one", T1),
 	T3 = trie:add("a.b.c", "two", T2),
 	T4 = trie:add("a.b", "ignore", T3),

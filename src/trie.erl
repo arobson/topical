@@ -48,13 +48,13 @@ add(Pattern, Value, Trie) ->
 %% subscription matching the Topic
 -spec get(Topic::list(), Trie::trie()) -> [term()] | [].
 get(Topic, Trie) ->
-	find_leaf(Trie, segment(Topic)).
+	lists:usort(find_leaf(Trie, segment(Topic))).
 
 %% Determine if Pattern presently exists in Trie
 -spec is_member(Pattern::list(), Trie::trie()) -> true | false.
 is_member(Pattern, Trie) ->
 	case find_leaf(Trie, segment(Pattern)) of
-		nomatch -> false;
+		[] -> false;
 		_ -> true
 	end.
 
@@ -96,35 +96,69 @@ add_leaf([H|T], Segments, Values) ->
 
 contains(X) -> fun(Y) -> Y =/= X end.
 
+%% Determine wether or not any children of a '#' node
+%% match the current segment. This is used so that the
+%% patterns that don't end in '#' will still be correctly matched.
+find_child(_,[]) -> nomatch;
+find_child(Segment, [{Segment, {_,_}}=Child|_]) -> Child;
+find_child(Segment, [_|T]) -> find_child(Segment, T).
+
+%% Convenience method; provides empty match list to start.
 find_leaf(Trie, Segments) -> find_leaf(Trie, Segments, []).
 
+%% At the end of the trie. Return any found matches.
 find_leaf([], _, Matches) -> Matches;
 
+%% At the end of the segments provided in the published topic.
+%% Returns any values associated with this trie node since it
+%% matches the last segment of the published topic.
+%% Continues checking the remainder of siblings at this level.
 find_leaf([{Segment, {Values, _}}|T], [Segment], Matches) -> 
 	find_leaf(T, [Segment], Matches ++ Values);
 
+%% At the end of the segments provided in the published topic.
+%% Returns any values associated with this trie node since it
+%% matches the last segment of the published topic.
+%% Continues checking the remainder of siblings at this level.
 find_leaf([{"*", {Values, _}}|T], [Segment], Matches) -> 
 	find_leaf(T, [Segment], Matches ++ Values);
 
-find_leaf([{"#", {Values, _}}|T], [Segment], Matches) -> 
-	find_leaf(T, [Segment], Matches ++ Values);
+%% At the end of the segments provided in the published topic.
+%% Returns any values associated with this trie node and also
+%% includes values from any child node that matches the end
+%% segment.
+%% Continues checking the remainder of siblings at this level.
+find_leaf([{"#", {Values, Children}}|T], [Segment], Matches) -> 
+	find_leaf(T, [Segment], find_leaf(Children, [Segment], Matches ++ Values));
 
-find_leaf([{Segment, {_, []}}|T], [Segment|_]=All, Matches) -> 
-	find_leaf(T, All, Matches);
+%% Node matches the current segment exactly but has no child nodes.
+%% Continue checking siblings for '#' or '*' nodes.
+find_leaf([{Segment, {_, []}}|T], [Segment|Segments], Matches) ->
+	find_leaf(T, Segments, Matches);
 
+%% Node matches one segment. Continue checking its children against
+%% remaining segments and check topic against siblings.
 find_leaf([{"*", {_, Children}}|T], [_|Segments]=All, Matches) -> 
 	find_leaf(Children, Segments, find_leaf(T, All, Matches));
 
-find_leaf([{"#", {Values, _}}|[{Segment, {_, Children}}|T]], [Segment|Segments]=All, Matches) ->
-	find_leaf(Children, Segments, find_leaf(T, All, Matches ++ Values));
+%% Node matches one or more segments. Continue checking its children against
+%% remaining segments and check topic against siblings.
+%% If its next child matches the current topic, move to the next node.
+%% Otherwise, continue using this node to match against remaining segments.
+find_leaf([{"#", {Values, Children}}|T]=Trie, [Segment|Segments]=All, Matches) -> 
+	case find_child(Segment, Children) of
+		nomatch -> find_leaf(Trie, Segments, find_leaf(T, All, Matches ++ Values));
+		Child -> find_leaf(Child, All, find_leaf(T, All, Matches ++ Values))
+	end;
 
-find_leaf([{"#", {Values, Children}}|T], [_|_]=All, Matches) -> 
-	find_leaf(Children, All, find_leaf(T, All, Matches ++ Values));
-
+%% Node matches the current segment exactly. Continue checking its children
+%% and siblings for matches.
 find_leaf([{Segment, {_, Children}}|T], [Segment|Segments]=All, Matches) -> 
 	find_leaf(Children, Segments, find_leaf(T, All, Matches));
 
-find_leaf([_|T], Segments, Matches) -> find_leaf(T, Segments, Matches).
+%% Node does not match. Continue checking siblings.
+find_leaf([{_,_}|T], Segments, Matches) ->
+	find_leaf(T, Segments, Matches).
 
 remove_leaf([], _, _) -> [];
 

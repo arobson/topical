@@ -29,6 +29,6 @@ test: eunit ct
 
 start:
 		if test -d $(SYNC_PATH); \
-		then exec erl -setcookie json -pa $(PWD)/deps/*/ebin -pa $(PWD)/ebin -boot start_sasl; \
-		else exec erl -setcookie json -pa $(PWD)/deps/*/ebin -pa $(PWD)/ebin -boot start_sasl; \
+		then exec erl -setcookie json -pa $(PWD)/deps/*/ebin -pa $(PWD)/ebin -boot start_sasl -s topical; \
+		else exec erl -setcookie json -pa $(PWD)/deps/*/ebin -pa $(PWD)/ebin -boot start_sasl -s topical; \
 		fi
