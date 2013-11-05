@@ -32,7 +32,9 @@
 publish(Topic, Event) when is_bitstring(Topic) ->
 	publish(binary_to_list(Topic), Event);
 publish(Topic, Event) ->
-	gen_event:notify(?BROKER, {Topic, Event}).
+	% gen_event:notify(?BROKER, {Topic, Event}).
+	Calls = trie:get(Topic),
+	publish_events(Topic, Event, Calls).
 
 %% Starts the topicla application
 -spec start() -> ok.
@@ -54,10 +56,20 @@ stop() ->
 %%	 "#.world" - any topic ending with "world" including only "world"
 -spec subscribe(Topic::list(), Callback::fun((term(), list()) -> ok)) -> ok.
 subscribe(Topic, Callback) ->
-	gen_event:call(?BROKER, ?HANDLER, {subscribe, Topic, Callback}).
+	% gen_event:call(?BROKER, ?HANDLER, {subscribe, Topic, Callback}).
+	trie:add(Topic, Callback).
 
 %% Removes the callback from a topic. Must provide the
 %% exact Topic pattern and callback reference.
 -spec unsubscribe(Topic::list(), Callback::fun((term(), list()) -> ok)) -> ok.
 unsubscribe(Topic, Callback) ->
-	gen_event:call(?BROKER, ?HANDLER, {unsubscribe, Topic, Callback}).
+	% gen_event:call(?BROKER, ?HANDLER, {unsubscribe, Topic, Callback}).
+	trie:remove(Topic, Callback).
+
+publish_events(Topic, Event, Callbacks) ->
+	lists:foreach(
+		fun(Call) ->
+			% spawn(fun() -> Call(Event, Topic) end)
+			Call(Event, Topic)
+		end,
+	Callbacks).

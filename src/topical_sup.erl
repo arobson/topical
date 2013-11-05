@@ -21,6 +21,7 @@ start_link() ->
 	supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
+	trie:init_ets(),
 	RestartStrategy = one_for_one,
 	MaxRestarts = 3,
 	MaxSecondsBetweenRestarts = 60,

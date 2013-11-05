@@ -34,6 +34,7 @@ contains_test() ->
 	?assertEqual([1,2,4,5,6],L2).
 
 create_trie() ->
+	trie:init_ets(),
 	T = [],
 	T1 = trie:add("this.#.test", "ta-da", T),
 	T2 = trie:add("a.b.c", "one", T1),

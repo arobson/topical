@@ -9,11 +9,15 @@
 %%% Created October 16, 2013 by Alex Robson
 
 -module(trie).
-
+-on_load(init_ets/0).
 -export([
+		add/2,
 		add/3,
+		get/1,
 		get/2,
+		init_ets/0,
 		is_member/2,
+		remove/2,
 		remove/3
 	]).
 
@@ -34,29 +38,56 @@
 %%  API
 %% ===================================================================
 
+%% Add a key to the trie stored in ETS.
+-spec add(Pattern::list(), Value::term()) -> ok.
+add(Pattern, Value) ->
+	Trie = get_trie(),
+	NewTrie=add(Pattern, Value, Trie),
+	store_trie(NewTrie),
+	NewTrie.
+
 %% Add key to the trie. Pattern is expected to be a string of the form:
 %%  "#"
 %%  "*"
 %%  "this.#.test"
 -spec add(Pattern::list(), Value::term(), trie()) -> trie().
 add(Pattern, Value, []) ->
-	add_leaf([], segment(Pattern), Value);
+	add_leaf([], get_segments(Pattern), Value);
 add(Pattern, Value, Trie) ->
-	add_leaf(Trie, segment(Pattern), Value).
+	add_leaf(Trie, get_segments(Pattern), Value).
+
+%% Return a list of all values found that contain a
+%% subscription matching the Topic
+-spec get(Topic::list()) -> [term()] | [].
+get(Topic) -> get(Topic, get_trie()).
 
 %% Return a list of all values found that contain a
 %% subscription matching the Topic
 -spec get(Topic::list(), Trie::trie()) -> [term()] | [].
 get(Topic, Trie) ->
-	lists:usort(find_leaf(Trie, segment(Topic))).
+	case get_matches(Topic) of
+		[] -> 
+			Matches = lists:usort(find_leaf(Trie, get_segments(Topic))),
+			write_matches(Topic, Matches),
+			Matches;
+		X -> X
+	end.
 
 %% Determine if Pattern presently exists in Trie
 -spec is_member(Pattern::list(), Trie::trie()) -> true | false.
 is_member(Pattern, Trie) ->
-	case find_leaf(Trie, segment(Pattern)) of
+	case find_leaf(Trie, get_segments(Pattern)) of
 		[] -> false;
 		_ -> true
 	end.
+
+%% Removes the Pattern and Value from the Trie if they exist.
+-spec remove(Pattern::list(), Value::term()) -> trie().
+remove(Pattern, Value) ->
+	Trie = get_trie(),
+	NewTrie=remove(Pattern, Value, Trie),
+	store_trie(NewTrie),
+	NewTrie.
 
 %% Removes the Pattern and Value from the Trie if they exist.
 -spec remove(Pattern::list(), Value::term(), Trie::trie()) -> trie().
@@ -175,3 +206,38 @@ remove_leaf([H|T], Segments, Values) ->
 	[H|remove_leaf(T, Segments, Values)].
 
 segment(Key) -> string:tokens(Key, ".").
+
+%% ===================================================================
+%%  ETS
+%% ===================================================================
+
+init_ets() ->
+	ets:new(trie, [ordered_set, public, named_table, {read_concurrency, true}]),
+	ok.
+
+get_matches(Topic) ->
+	case ets:lookup(trie, {matches, Topic}) of
+		[] -> [];
+		[{{_,_}, Matches}] -> Matches
+	end.
+
+get_segments(Topic) ->
+	case ets:lookup(trie, {segments, Topic}) of
+		[] -> 
+			Segments = segment(Topic),
+			ets:insert(trie, {{segments, Topic}, Segments}),
+			Segments;
+		[{{_,_},X}] -> X
+	end.
+
+get_trie() ->
+	case ets:lookup(trie, trie) of
+		[] -> [];
+		[{trie,Trie}] -> Trie
+	end.
+
+store_trie(Trie) ->
+	ets:insert(trie, {trie, Trie}).
+
+write_matches(Topic, Matches) ->
+	ets:insert(trie, {{matches, Topic}, Matches}).
